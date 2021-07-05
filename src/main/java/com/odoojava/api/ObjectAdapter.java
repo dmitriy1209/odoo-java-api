@@ -71,15 +71,13 @@ public class ObjectAdapter {
      *
      * @param session Session object that will be used to make the calls
      * @param modelName Model name that this adapter will work for.
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
-    public ObjectAdapter(Session session, String modelName) throws XmlRpcException, OdooApiException {
+    public ObjectAdapter(Session session, String modelName) throws OdooApiException {
         this(new OdooCommand(session), modelName, session.getServerVersion());
     }
 
-    ObjectAdapter(OdooCommand command, String modelName, Version serverVersion)
-            throws OdooApiException, XmlRpcException {
+    ObjectAdapter(OdooCommand command, String modelName, Version serverVersion) throws OdooApiException {
         this.command = command;
         this.modelName = modelName;
         this.serverVersion = serverVersion;
@@ -98,28 +96,32 @@ public class ObjectAdapter {
      * @throws OdooApiException If the model could not be validated
      */
     @SuppressWarnings("unchecked")
-    synchronized void validateModelExists() throws OdooApiException, XmlRpcException {
-        // If you can't find the object name, reload the cache. Somebody may
-        // have added a new module after the cache was created
-        // Ticket #1 from sourceforge
-        
-        Object[] ids = null;
-        if (objectNameCache.indexOf(modelName) < 0) {
-            clearModelNameCache();
-            //TODO: Improve this part by using appropriate filterhelper
-            Response response = command.searchObject("ir.model", new Object[]{});
-            if (response.isSuccessful()) {
-                ids = response.getResponseObjectAsArray();
-                Object[] result = command.readObject("ir.model", ids, new String[]{"model"});
-                for (Object row : result) {
-                    objectNameCache.add(((HashMap<String, Object>) row).get("model").toString());
+    synchronized void validateModelExists() throws OdooApiException {
+        try {
+            // If you can't find the object name, reload the cache. Somebody may
+            // have added a new module after the cache was created
+            // Ticket #1 from sourceforge
+
+            Object[] ids = null;
+            if (objectNameCache.indexOf(modelName) < 0) {
+                clearModelNameCache();
+                //TODO: Improve this part by using appropriate filterhelper
+                Response response = command.searchObject("ir.model", new Object[]{});
+                if (response.isSuccessful()) {
+                    ids = response.getResponseObjectAsArray();
+                    Object[] result = command.readObject("ir.model", ids, new String[]{"model"});
+                    for (Object row : result) {
+                        objectNameCache.add(((HashMap<String, Object>) row).get("model").toString());
+                    }
                 }
+
             }
 
-        }
-        
-        if (objectNameCache.indexOf(modelName) < 0) {
-            throw new OdooApiException("Could not find model with name '" + modelName + "'");
+            if (objectNameCache.indexOf(modelName) < 0) {
+                throw new OdooApiException("Could not find model with name '" + modelName + "'");
+            }
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
         }
     }
 
@@ -197,10 +199,9 @@ public class ObjectAdapter {
      *
      * @param fields Fields that should be included in the row definition
      * @return An empty row with the specified fields
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
-    public Row getNewRow(String[] fields) throws XmlRpcException, OdooApiException {
+    public Row getNewRow(String[] fields) throws OdooApiException {
         return getNewRow(getFields(fields));
     }
 
@@ -211,38 +212,41 @@ public class ObjectAdapter {
      * @param ids List of ids to fetch objects for
      * @param fields List of fields to fetch data for
      * @return A collection of rows for an Odoo object
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
-    public RowCollection readObject(Object[] ids, String[] fields) throws XmlRpcException, OdooApiException {
+    public RowCollection readObject(Object[] ids, String[] fields) throws OdooApiException {
 
-        // Faster to do read existing fields that to do a server call again
-        FieldCollection fieldCol = new FieldCollection();
-        for (String fieldName : fields) {
-            for (Field fld : allFields) {
-                if (fld.getName().equals(fieldName)) fieldCol.add(fld);
+        try {
+            // Faster to do read existing fields that to do a server call again
+            FieldCollection fieldCol = new FieldCollection();
+            for (String fieldName : fields) {
+                for (Field fld : allFields) {
+                    if (fld.getName().equals(fieldName)) fieldCol.add(fld);
+                }
             }
+            
+            Object[] results = command.readObject(modelName, ids, fields);
+            
+            /**
+             * **
+             * 18/04/2012 - PvdM Maybe reconsider this piece of code for later. Does
+             * it matter if it isn't sorted by ID?
+             *
+             * // Odoo doesn't use the sorting you pass (specified in the search
+             * function to get a sorted list of IDs). // When they fix it, remove
+             * this section of code ArrayList<Integer> idList = new ArrayList
+             * <Integer>(); for (Object id : ids){
+             * idList.add(Integer.parseInt(id.toString())); } Object[] sortedResults
+             * = new Object[ids.length]; for (Object result : results){
+             *
+             * @SuppressWarnings("unchecked") int id = null null null null null null null         Integer.parseInt(((HashMap<String,
+             * Object>)result).get("id").toString());
+             * sortedResults[idList.indexOf(id)] = result; } **
+             */
+            return new RowCollection(results, fieldCol);
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
         }
-
-        Object[] results = command.readObject(modelName, ids, fields);
-
-        /**
-         * **
-         * 18/04/2012 - PvdM Maybe reconsider this piece of code for later. Does
-         * it matter if it isn't sorted by ID?
-         *
-         * // Odoo doesn't use the sorting you pass (specified in the search
-         * function to get a sorted list of IDs). // When they fix it, remove
-         * this section of code ArrayList<Integer> idList = new ArrayList
-         * <Integer>(); for (Object id : ids){
-         * idList.add(Integer.parseInt(id.toString())); } Object[] sortedResults
-         * = new Object[ids.length]; for (Object result : results){
-         *
-         * @SuppressWarnings("unchecked") int id = null null null null null null null         Integer.parseInt(((HashMap<String,
-		 * Object>)result).get("id").toString());
-         * sortedResults[idList.indexOf(id)] = result; } **
-         */
-        return new RowCollection(results, fieldCol);
     }
 
     /**
@@ -251,9 +255,8 @@ public class ObjectAdapter {
      * linked to
      *
      * @return FieldCollecton data for all fields of the object
-     * @throws XmlRpcException
      */
-    public FieldCollection getFields() throws XmlRpcException {
+    public FieldCollection getFields() {
         return this.getFields(new String[]{});
     }
 
@@ -262,9 +265,8 @@ public class ObjectAdapter {
      * Fetches field names for the current Odoo object this adapter is linked to
      *
      * @return Array of field names
-     * @throws XmlRpcException
      */
-    public String[] getFieldNames() throws XmlRpcException {
+    public String[] getFieldNames() {
         FieldCollection fields = getFields(new String[]{});
         String[] fieldNames = new String[fields.size()];
         for (int i = 0; i < fields.size(); i++) {
@@ -280,25 +282,16 @@ public class ObjectAdapter {
      *
      * @param filterFields Only return data for files in the filter list
      * @return FieldCollecton data for selected fields of the object
-     * @throws XmlRpcException
      */
     @SuppressWarnings("unchecked")
-    public FieldCollection getFields(String[] filterFields) throws XmlRpcException {
-        
-        return command.getFields(modelName, filterFields).entrySet().stream()
-                .map(e -> new Field(e.getKey(), (Map<String, Object>)e.getValue()))
-                .collect(Collectors.toCollection(FieldCollection::new));
-        
-//        FieldCollection collection = new FieldCollection();
-//        
-//        Map<String, Object> fields = command.getFields(modelName, filterFields);
-//
-//        for (String fieldName : fields.keySet()) {
-//            Map<String, Object> fieldDetails = (Map<String, Object>) fields.get(fieldName);
-//            collection.add(new Field(fieldName, fieldDetails));
-//        }
-//
-//        return collection;
+    public FieldCollection getFields(String[] filterFields) {        
+        try {
+            return command.getFields(modelName, filterFields).entrySet().stream()
+                    .map(e -> new Field(e.getKey(), (Map<String, Object>)e.getValue()))
+                    .collect(Collectors.toCollection(FieldCollection::new));            
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
     
     /**
@@ -436,123 +429,130 @@ public class ObjectAdapter {
         return null;
     }
 
-    private Object[] fixImportData(Row inputRow) throws OdooApiException, XmlRpcException {
+    private Object[] fixImportData(Row inputRow) throws OdooApiException {
+        try {
+            // +1 because we need to include the ID field
+            Object[] outputRow = new Object[inputRow.getFields().size() + 1];
 
-        // +1 because we need to include the ID field
-        Object[] outputRow = new Object[inputRow.getFields().size() + 1];
-
-        // ID must be an integer
-        outputRow[0] = inputRow.get("id");
-        if (outputRow[0] == null) {
-            outputRow[0] = 0;
-        } 
-        else outputRow[0] = Integer.parseInt(inputRow.get("id").toString());
-
-        for (int i = 0; i < inputRow.getFields().size(); i++) {
-            int columnIndex = i + 1;
-            
-            Field fld = inputRow.getFields().get(i);
-            String fieldName = fld.getName();
-            Object value = inputRow.get(fieldName);
-
-            outputRow[columnIndex] = value;
-
-            if (fld.getType() == FieldType.MANY2ONE) {
-                if (value == null) outputRow[columnIndex] = 0;
-                else outputRow[columnIndex] = Integer.parseInt(value.toString());
-                continue;
+            // ID must be an integer
+            outputRow[0] = inputRow.get("id");
+            if (outputRow[0] == null) {
+                outputRow[0] = 0;
+            } else {
+                outputRow[0] = Integer.parseInt(inputRow.get("id").toString());
             }
 
-            // Null values must be false
-            if (value == null) {
-                outputRow[columnIndex] = false;
-                continue;
-            }
+            for (int i = 0; i < inputRow.getFields().size(); i++) {
+                int columnIndex = i + 1;
 
-            value = formatValueForWrite(fld, value);
+                Field fld = inputRow.getFields().get(i);
+                String fieldName = fld.getName();
+                Object value = inputRow.get(fieldName);
 
-            // Check types
-            switch (fld.getType()) {
-                case SELECTION:
-                    boolean validValue = false;
-                    for (SelectionOption option : fld.getSelectionOptions()) {
-                        // If the database code was specified, replace it with the
-                        // value.
-                        // The import procedure uses the value and not the code
-                        if (option.code.equals(value.toString())) {
-                            validValue = true;
-                            outputRow[columnIndex] = option.value;
-                            break;
-                        } else if (option.value.equals(value.toString())) {
-                            outputRow[columnIndex] = value;
-                            validValue = true;
-                            break;
+                outputRow[columnIndex] = value;
+
+                if (fld.getType() == FieldType.MANY2ONE) {
+                    if (value == null) {
+                        outputRow[columnIndex] = 0;
+                    } else {
+                        outputRow[columnIndex] = Integer.parseInt(value.toString());
+                    }
+                    continue;
+                }
+
+                // Null values must be false
+                if (value == null) {
+                    outputRow[columnIndex] = false;
+                    continue;
+                }
+
+                value = formatValueForWrite(fld, value);
+
+                // Check types
+                switch (fld.getType()) {
+                    case SELECTION:
+                        boolean validValue = false;
+                        for (SelectionOption option : fld.getSelectionOptions()) {
+                            // If the database code was specified, replace it with the
+                            // value.
+                            // The import procedure uses the value and not the code
+                            if (option.code.equals(value.toString())) {
+                                validValue = true;
+                                outputRow[columnIndex] = option.value;
+                                break;
+                            } else if (option.value.equals(value.toString())) {
+                                outputRow[columnIndex] = value;
+                                validValue = true;
+                                break;
+                            }
                         }
-                    }
-                    if (!validValue) {
-                        throw new OdooApiException(
-                                "Could not find a valid value for section field " + fieldName + " with value " + value);
-                    }
-                    break;
-                case MANY2MANY:
-                    /*
+                        if (!validValue) {
+                            throw new OdooApiException(
+                                    "Could not find a valid value for section field " + fieldName + " with value " + value);
+                        }
+                        break;
+                    case MANY2MANY:
+                        /*
 				 * The import function uses the Names of the objects for the
 				 * import. Replace the ID list passed in with a Name list for
 				 * the import_data function that we are about to call
-                     */
-                    Map<String, String> idToName;
-                    if (!modelNameCache.containsKey(fld.getRelation())) {
-                        idToName = new HashMap<>();
-                        //Object[] ids = new Object[]{};
-                        Response response = command.searchObject(fld.getRelation(), new Object[]{});
-                        if (response.isSuccessful()) {
-                            Object[] ids = response.getResponseObjectAsArray();
-                            Object[] names = command.nameGet(fld.getRelation(), ids);
-                            for (int j = 0; j < ids.length; j++) {
-                                Object[] nameValue = (Object[]) names[j];
-                                idToName.put(nameValue[0].toString(), nameValue[1].toString());
+                         */
+                        Map<String, String> idToName;
+                        if (!modelNameCache.containsKey(fld.getRelation())) {
+                            idToName = new HashMap<>();
+                            //Object[] ids = new Object[]{};
+                            Response response = command.searchObject(fld.getRelation(), new Object[]{});
+                            if (response.isSuccessful()) {
+                                Object[] ids = response.getResponseObjectAsArray();
+                                Object[] names = command.nameGet(fld.getRelation(), ids);
+                                for (int j = 0; j < ids.length; j++) {
+                                    Object[] nameValue = (Object[]) names[j];
+                                    idToName.put(nameValue[0].toString(), nameValue[1].toString());
+                                }
                             }
+
+                            modelNameCache.put(fld.getRelation(), idToName);
+                        } else {
+                            idToName = modelNameCache.get(fld.getRelation());
                         }
 
-                        modelNameCache.put(fld.getRelation(), idToName);
-                    } else {
-                        idToName = modelNameCache.get(fld.getRelation());
-                    }
-
-                    String newValue = "";
-                    // Comma separated list of IDs
-                    if (value instanceof String) {
-                        for (String singleID : value.toString().split(",")) {
-                            if (idToName.containsKey(singleID)) {
-                                newValue = newValue + "," + idToName.get(singleID);
-                            } else {
-                                throw new OdooApiException(
-                                        "Could not find " + fld.getRelation() + " with ID " + singleID);
+                        String newValue = "";
+                        // Comma separated list of IDs
+                        if (value instanceof String) {
+                            for (String singleID : value.toString().split(",")) {
+                                if (idToName.containsKey(singleID)) {
+                                    newValue = newValue + "," + idToName.get(singleID);
+                                } else {
+                                    throw new OdooApiException(
+                                            "Could not find " + fld.getRelation() + " with ID " + singleID);
+                                }
+                            }
+                        } else {
+                            // Object[] of values -- default
+                            for (Object singleID : (Object[]) value) {
+                                if (idToName.containsKey(singleID.toString())) {
+                                    newValue = newValue + "," + idToName.get(singleID.toString());
+                                } else {
+                                    throw new OdooApiException(
+                                            "Could not find " + fld.getRelation() + " with ID " + singleID.toString());
+                                }
                             }
                         }
-                    } else {
-                        // Object[] of values -- default
-                        for (Object singleID : (Object[]) value) {
-                            if (idToName.containsKey(singleID.toString())) {
-                                newValue = newValue + "," + idToName.get(singleID.toString());
-                            } else {
-                                throw new OdooApiException(
-                                        "Could not find " + fld.getRelation() + " with ID " + singleID.toString());
-                            }
-                        }
-                    }
-                    outputRow[columnIndex] = newValue.substring(1);
+                        outputRow[columnIndex] = newValue.substring(1);
 
-                    break;
+                        break;
 
-                // The import procedure expects most types to be strings
-                default:
-                    outputRow[columnIndex] = value.toString();
-                    break;
+                    // The import procedure expects most types to be strings
+                    default:
+                        outputRow[columnIndex] = value.toString();
+                        break;
+                }
             }
-        }
 
-        return outputRow;
+            return outputRow;
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
 
     private String[] getFieldListForImport(FieldCollection currentFields) {
@@ -583,53 +583,55 @@ public class ObjectAdapter {
      *
      * @param rows Rows to import.
      * @return If the import was successful
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
-    public boolean importData(RowCollection rows) throws OdooApiException, XmlRpcException {
-        // Workaround: old and new rows can't be sent together
-        // together using the import_data or load function
-        if (this.serverVersion.getMajor() >= 7) {
-            RowCollection newRows = new RowCollection();
-            RowCollection oldRows = new RowCollection();
+    public boolean importData(RowCollection rows) throws OdooApiException {
+        try {
+            // Workaround: old and new rows can't be sent together
+            // together using the import_data or load function
+            if (this.serverVersion.getMajor() >= 7) {
+                RowCollection newRows = new RowCollection();
+                RowCollection oldRows = new RowCollection();
 
-            for (int i = 0; i < rows.size(); i++) {
-                if (rows.get(i).getID() == 0) {
-                    newRows.add(rows.get(i));
-                } else {
-                    oldRows.add(rows.get(i));
+                for (int i = 0; i < rows.size(); i++) {
+                    if (rows.get(i).getID() == 0) {
+                        newRows.add(rows.get(i));
+                    } else {
+                        oldRows.add(rows.get(i));
+                    }
+                }
+
+                // If mixed rows, import old and new rows separately
+                if (!newRows.isEmpty() && !oldRows.isEmpty()) {
+                    return this.importData(oldRows) && this.importData(newRows);
                 }
             }
 
-            // If mixed rows, import old and new rows separately
-            if (!newRows.isEmpty() && !oldRows.isEmpty()) {
-                return this.importData(oldRows) && this.importData(newRows);
+            modelNameCache.clear();
+
+            Object[][] importRows = new Object[rows.size()][];
+
+            for (int i = 0; i < rows.size(); i++) {
+                Row row = rows.get(i);
+                importRows[i] = fixImportData(row);
             }
+
+            if (this.serverVersion.getMajor() >= 7) {
+                // The load function was introduced in V7 and the import function
+                // deprecated
+                importDataV7(rows, importRows);
+            } else {
+                // Use older import rows function
+                importDataLegacy(rows, importRows);
+            }
+
+            return true;
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
         }
-
-        modelNameCache.clear();
-
-        Object[][] importRows = new Object[rows.size()][];
-
-        for (int i = 0; i < rows.size(); i++) {
-            Row row = rows.get(i);
-            importRows[i] = fixImportData(row);
-        }
-
-        if (this.serverVersion.getMajor() >= 7) {
-            // The load function was introduced in V7 and the import function
-            // deprecated
-            importDataV7(rows, importRows);
-        } else {
-            // Use older import rows function
-            importDataLegacy(rows, importRows);
-        }
-
-        return true;
     }
 
-    private void importDataLegacy(RowCollection rows, Object[][] importRows)
-            throws XmlRpcException, OdooApiException {
+    private void importDataLegacy(RowCollection rows, Object[][] importRows) throws XmlRpcException, OdooApiException {
 
         String[] targetFieldList = getFieldListForImport(rows.get(0).getFields());
 
@@ -692,18 +694,21 @@ public class ObjectAdapter {
      * @param filter A filter collection that contains a list of filters to be
      * applied
      * @return The number of record count.
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
-    public int getObjectCount(FilterCollection filter) throws XmlRpcException, OdooApiException {
-        Integer count = 0;
-        Object[] preparedFilters = validateFilters(filter);
-
-        Response response = command.searchObject(modelName, preparedFilters, -1, -1, null, true);
-        if (response.isSuccessful()) {
-            count = Integer.parseInt(response.getResponseObject().toString());
+    public int getObjectCount(FilterCollection filter) throws OdooApiException {
+        try {
+            Integer count = 0;
+            Object[] preparedFilters = validateFilters(filter);
+            
+            Response response = command.searchObject(modelName, preparedFilters, -1, -1, null, true);
+            if (response.isSuccessful()) {
+                count = Integer.parseInt(response.getResponseObject().toString());
+            }
+            return count;
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
         }
-        return count;
     }
 
     /**
@@ -715,11 +720,9 @@ public class ObjectAdapter {
      * applied
      * @param fields List of fields to return data for
      * @return A collection of rows for an Odoo object
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
-    public RowCollection searchAndReadObject(FilterCollection filter, String[] fields)
-            throws XmlRpcException, OdooApiException {
+    public RowCollection searchAndReadObject(FilterCollection filter, String[] fields) throws OdooApiException {
         return searchAndReadObject(filter, fields, -1, -1, "");
     }
 
@@ -734,18 +737,21 @@ public class ObjectAdapter {
      * @param limit Maximum number of rows to return. -1 for no limit.
      * @param order Field name to order on
      * @return A collection of rows for an Odoo object
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
     public RowCollection searchAndReadObject(final FilterCollection filter, final String[] fields, int offset,
-            int limit, String order) throws XmlRpcException, OdooApiException {
+            int limit, String order) throws OdooApiException {
 
-        String[] fieldArray = fields == null ? new String[]{} : fields;
-        Object[] preparedFilters = validateFilters(filter);
-        Object[] idList = null;
-        Response response = command.searchObject(modelName, preparedFilters, offset, limit, order, false);
-        if (response.isSuccessful()) idList = response.getResponseObjectAsArray();
-        return readObject(idList, fieldArray);
+        try {
+            String[] fieldArray = fields == null ? new String[]{} : fields;
+            Object[] preparedFilters = validateFilters(filter);
+            Object[] idList = null;
+            Response response = command.searchObject(modelName, preparedFilters, offset, limit, order, false);
+            if (response.isSuccessful()) idList = response.getResponseObjectAsArray();
+            return readObject(idList, fieldArray);
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
 
     }
 
@@ -809,10 +815,8 @@ public class ObjectAdapter {
      * @return An array of logicals. One for each row to indicate if the update
      * was successful
      * @throws OdooApiException
-     * @throws XmlRpcException
      */
-    public Boolean[] writeObject(final RowCollection rows, final boolean changesOnly)
-            throws OdooApiException, XmlRpcException {
+    public Boolean[] writeObject(final RowCollection rows, final boolean changesOnly) throws OdooApiException {
         Boolean[] returnValues = new Boolean[rows.size()];
 
         for (int i = 0; i < rows.size(); i++) {
@@ -830,7 +834,6 @@ public class ObjectAdapter {
      * @param changesOnly Only changed values will be submitted to the database.
      * @return If the update was successful
      * @throws OdooApiException
-     * @throws XmlRpcException
      */
     public boolean writeObject(final Row row, boolean changesOnly) throws OdooApiException {
 
@@ -863,18 +866,21 @@ public class ObjectAdapter {
      *
      * @param row Data row read data from to create the Object
      * @throws OdooApiException
-     * @throws XmlRpcException
      */
-    public void createObject(final Row row) throws OdooApiException, XmlRpcException {
+    public void createObject(final Row row) throws OdooApiException {
 
-        final Map<String, Object> valueList = collectValues(row, false);
-
-        if (valueList.isEmpty()) throw new OdooApiException("Row doesn't have any fields to update");
-
-        Object id = command.createObject(modelName, valueList);
-
-        row.put("id", id);
-        row.changesApplied();
+        try {
+            final Map<String, Object> valueList = collectValues(row, false);
+            
+            if (valueList.isEmpty()) throw new OdooApiException("Row doesn't have any fields to update");
+            
+            Object id = command.createObject(modelName, valueList);
+            
+            row.put("id", id);
+            row.changesApplied();
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
         
     }
 
@@ -886,13 +892,10 @@ public class ObjectAdapter {
      * @param functionName function to call
      * @param parameters Additional parameters that will be passed to the object
      * @return A field collection
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
-    public FieldCollection callFieldsFunction(String functionName, Object[] parameters)
-            throws XmlRpcException, OdooApiException {
+    public FieldCollection callFieldsFunction(String functionName, Object[] parameters) throws OdooApiException {
         Response response = command.callObjectFunction(modelName, functionName, parameters);
-
         return callFieldsFunction(response);
     }
 
@@ -988,14 +991,17 @@ public class ObjectAdapter {
      * @param row Row that represents the object that the signal should be sent
      * for
      * @param signal Signal name to send
-     * @throws XmlRpcException
      * @throws OdooApiException
      */
-    public void executeWorkflow(Row row, String signal) throws XmlRpcException, OdooApiException {
-        // Sanity check
-        checkSignalExists(signal);
-
-        command.executeWorkflow(this.modelName, signal, row.getID());
+    public void executeWorkflow(Row row, String signal) throws OdooApiException {
+        try {
+            // Sanity check
+            checkSignalExists(signal);
+            
+            command.executeWorkflow(this.modelName, signal, row.getID());
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
 
     /**
@@ -1003,14 +1009,17 @@ public class ObjectAdapter {
      *
      * @param rows Rows to delete
      * @return If all rows were successfully deleted
-     * @throws XmlRpcException
      */
-    public boolean unlinkObject(RowCollection rows) throws XmlRpcException {
-        //Object[] ids = new Object[rows.size()];
-        //for (int i = 0; i < rows.size(); i++) ids[i] = rows.get(i).getID();
-        //return this.command.unlinkObject(this.modelName, ids);
-        return this.command.unlinkObject(this.modelName, 
-                rows.stream().map(row->row.getID()).toArray());
+    public boolean unlinkObject(RowCollection rows) {
+        try {
+            //Object[] ids = new Object[rows.size()];
+            //for (int i = 0; i < rows.size(); i++) ids[i] = rows.get(i).getID();
+            //return this.command.unlinkObject(this.modelName, ids);
+            return this.command.unlinkObject(this.modelName,
+                    rows.stream().map(row->row.getID()).toArray());
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
 
     /**
@@ -1018,9 +1027,8 @@ public class ObjectAdapter {
      *
      * @param row Row to delete
      * @return If the row was successfully deleted
-     * @throws XmlRpcException
      */
-    public boolean unlinkObject(Row row) throws XmlRpcException {
+    public boolean unlinkObject(Row row) {
         RowCollection rows = new RowCollection();
         rows.add(row);
         return this.unlinkObject(rows);

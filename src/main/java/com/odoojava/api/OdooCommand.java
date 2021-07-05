@@ -92,7 +92,7 @@ public class OdooCommand {
                     ? new Response(session.executeCommand(objectName, "search", params))
                     : new Response(session.executeCommandWithContext(objectName, "search", params));
             return response;
-        } catch (XmlRpcException e) {
+        } catch (XmlRpcRuntimeException e) {
             return new Response(e);
         }
     }
@@ -233,7 +233,7 @@ public class OdooCommand {
     public Response callObjectFunction(String objectName, String functionName, Object[] parameters) {
         try {
             return new Response(session.executeCommand(objectName, functionName, parameters));
-        } catch (XmlRpcException e) {
+        } catch (XmlRpcRuntimeException e) {
             return new Response(e);
         }
     }

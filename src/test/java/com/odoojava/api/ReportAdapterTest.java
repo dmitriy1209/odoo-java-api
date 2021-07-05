@@ -52,7 +52,7 @@ public class ReportAdapterTest {
     public void testGoodReportAdapter() {
         try {
             reportAdapter = session.getReportAdapter("account.report_invoice");
-        } catch (OdooApiException | XmlRpcException e) {
+        } catch (OdooApiException | XmlRpcRuntimeException e) {
             fail("Your report doesn't exists!");
         }
     }

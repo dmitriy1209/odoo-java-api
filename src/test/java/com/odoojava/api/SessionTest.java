@@ -251,7 +251,7 @@ public class SessionTest {
         try {
             ArrayList<String> databaseList = Session.getDatabaseList(protocol, host, port);
             softly.assertThat(databaseList).as("List of databases on server " + host).contains(databaseName);
-        } catch (XmlRpcException e) {
+        } catch (XmlRpcRuntimeException e) {
             if (isUsingMockServer()) {
                 softly.assertThat(e).as("Database listing allowed, no exception should have been throwed").isNull();
             } else {
@@ -347,7 +347,7 @@ public class SessionTest {
             }
 
             @Override
-            void getRemoteContext() throws XmlRpcException {
+            void getRemoteContext() throws XmlRpcRuntimeException {
                 fetchedRemoteContext = true;
             }
         };

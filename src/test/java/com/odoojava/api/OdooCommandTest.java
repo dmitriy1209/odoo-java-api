@@ -1,7 +1,6 @@
 package com.odoojava.api;
 
 import java.util.Map;
-import org.apache.xmlrpc.XmlRpcException;
 import static org.assertj.core.api.Assertions.fail;
 import org.assertj.core.api.SoftAssertions;
 import static org.junit.Assert.assertArrayEquals;
@@ -10,7 +9,7 @@ import org.junit.Test;
 
 public class OdooCommandTest {
 
-    private static final XmlRpcException XML_RPC_EXCEPTION = new XmlRpcException("failed");
+    private static final XmlRpcRuntimeException XML_RPC_EXCEPTION = new XmlRpcRuntimeException("failed");
 
     @Test
     public void should_return_failed_response_if_exception() throws Exception {
@@ -22,7 +21,7 @@ public class OdooCommandTest {
         Session session = new Session(unusedHost, unusedPort, unusedDatabaseName, unusedUserName, unusedPassword) {
             @Override
             public Object executeCommand(String objectName, String commandName, Object[] parameters)
-                    throws XmlRpcException {
+                    throws XmlRpcRuntimeException {
                 throw XML_RPC_EXCEPTION;
             }
         };

@@ -28,7 +28,7 @@ public class ObjectAdapterTest {
         }
 
         @Override
-        public FieldCollection getFields() throws XmlRpcException {
+        public FieldCollection getFields() throws XmlRpcRuntimeException {
             return null;
         }
     }

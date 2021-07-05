@@ -27,7 +27,6 @@ import com.odoojava.api.OdooXmlRpcProxy.RPCProtocol;
 import com.odoojava.api.OdooXmlRpcProxy.RPCServices;
 import java.util.Arrays;
 import java.util.stream.Collectors;
-import lombok.SneakyThrows;
 
 /**
  * *
@@ -93,7 +92,7 @@ public class Session {
      *
      * @return
      */
-    public ObjectAdapter getObjectAdapter(String objectName) throws XmlRpcException, OdooApiException {
+    public ObjectAdapter getObjectAdapter(String objectName) throws OdooApiException {
         return new ObjectAdapter(this, objectName);
     }
 
@@ -122,7 +121,7 @@ public class Session {
     }
 
     //changed for testing another version of ODOO (11 and 12)
-    private void checkVersionCompatibility() throws XmlRpcException, OdooApiException {
+    private void checkVersionCompatibility() throws OdooApiException {
         /*
         if (this.getServerVersion().getMajor() < 8 || this.getServerVersion().getMajor() > 10) {
             throw new OdooApiException(
@@ -136,12 +135,15 @@ public class Session {
      * @param reportName
      * @return reportAdapter initialized with
      * @throws OdooApiException
-     * @throws XmlRpcException
      */
-    public ReportAdapter getReportAdapter(String reportName) throws OdooApiException, XmlRpcException {
-        ReportAdapter reportAdapter = new ReportAdapter(this);
-        reportAdapter.setReport(reportName);
-        return reportAdapter;
+    public ReportAdapter getReportAdapter(String reportName) throws OdooApiException {
+        try {
+            ReportAdapter reportAdapter = new ReportAdapter(this);
+            reportAdapter.setReport(reportName);
+            return reportAdapter;
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
 
     void getRemoteContext() {
@@ -155,7 +157,7 @@ public class Session {
         this.context.setActiveTest(true);
     }
 
-    int authenticate() throws XmlRpcException, Exception {
+    int authenticate() throws Exception {
         OdooXmlRpcProxy commonClient = new OdooXmlRpcProxy(protocol, host, port, RPCServices.RPC_COMMON);
         
         Object id = commonClient.execute("login", new Object[]{databaseName, userName, password});
@@ -175,7 +177,7 @@ public class Session {
         } catch (Exception e) {}
     }
 
-    void checkDatabasePresence() throws XmlRpcException {
+    void checkDatabasePresence() {
         ArrayList<String> dbList = getDatabaseList(protocol, host, port);
         if (!dbList.contains(databaseName)) {
             StringBuilder messageBuilder = new StringBuilder("Error while connecting to Odoo.  Database [")
@@ -204,9 +206,8 @@ public class Session {
      * @param host Host name or IP address where the Odoo server is hosted
      * @param port XML-RPC port number to connect to
      * @return A list of databases available for the Odoo instance
-     * @throws XmlRpcException
      */
-    public static ArrayList<String> getDatabaseList(String host, int port) throws XmlRpcException {
+    public static ArrayList<String> getDatabaseList(String host, int port) {
         return getDatabaseList(RPCProtocol.RPC_HTTP, host, port);
     }
 
@@ -218,15 +219,17 @@ public class Session {
      * @param host Host name or IP address where the Odoo server is hosted
      * @param port XML-RPC port number to connect to
      * @return A list of databases available for the Odoo instance
-     * @throws XmlRpcException
      */
-    public static ArrayList<String> getDatabaseList(RPCProtocol protocol, String host, int port)
-            throws XmlRpcException {
-        OdooXmlRpcProxy client = new OdooXmlRpcProxy(protocol, host, port, RPCServices.RPC_DATABASE);
-        // Retrieve databases
-        return Arrays.stream(((Object[]) client.execute("list", new Object[]{})))
-                .map(e -> String.valueOf(e))
-                .collect(Collectors.toCollection(ArrayList::new));
+    public static ArrayList<String> getDatabaseList(RPCProtocol protocol, String host, int port) {
+        try {
+            OdooXmlRpcProxy client = new OdooXmlRpcProxy(protocol, host, port, RPCServices.RPC_DATABASE);
+            // Retrieve databases
+            return Arrays.stream(((Object[]) client.execute("list", new Object[]{})))
+                    .map(e -> String.valueOf(e))
+                    .collect(Collectors.toCollection(ArrayList::new));
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
 
     /**
@@ -242,18 +245,21 @@ public class Session {
      * consider the OdooCommand object or ObjectAdapter
      * @return The result of the call
      */
-    @SneakyThrows
     public Object executeCommand(final String objectName, final String commandName, final Object[] parameters) {
-        Object[] connectionParams = new Object[]{databaseName, userID, password, objectName, commandName};
-
-        // Combine the connection parameters and command parameters
-        Object[] params = new Object[connectionParams.length + (parameters == null ? 0 : parameters.length)];
-        System.arraycopy(connectionParams, 0, params, 0, connectionParams.length);
-
-        if (parameters != null && parameters.length > 0) {
-            System.arraycopy(parameters, 0, params, connectionParams.length, parameters.length);
-        }        
-        return objectClient.execute("execute", params);
+        try {
+            Object[] connectionParams = new Object[]{databaseName, userID, password, objectName, commandName};
+            
+            // Combine the connection parameters and command parameters
+            Object[] params = new Object[connectionParams.length + (parameters == null ? 0 : parameters.length)];
+            System.arraycopy(connectionParams, 0, params, 0, connectionParams.length);
+            
+            if (parameters != null && parameters.length > 0) {
+                System.arraycopy(parameters, 0, params, connectionParams.length, parameters.length);
+            }
+            return objectClient.execute("execute", params);
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
         
     /**
@@ -267,19 +273,14 @@ public class Session {
      * consider the OdooCommand object or ObjectAdapter
      * @return The result of the call
      */
-    @SneakyThrows
     public Object executeCommandWithContext(final String objectName, final String commandName,
             final Object[] parameters) {
-        
-        //Object[] connectionParams = new Object[]{databaseName, userID, password, objectName, commandName};
-
         // Combine the parameters with the context
         Object[] params = new Object[1 + (parameters == null ? 0 : parameters.length)];
-        if (parameters != null && parameters.length > 0) 
+        if (parameters != null && parameters.length > 0) {
             System.arraycopy(parameters, 0, params, 0, parameters.length);
-        
+        }
         System.arraycopy(new Object[]{getContext()}, 0, params, parameters.length, 1);
-        
         return executeCommand(objectName, commandName, params);
     }
 
@@ -291,38 +292,47 @@ public class Session {
      * @param objectName Object or model name to send the signal for
      * @param signal Signal name to send, for example order_confirm
      * @param objectID Specific object ID to send the signal for
-     * @throws XmlRpcException
      */
-    public void executeWorkflow(final String objectName, final String signal, final int objectID)
-            throws XmlRpcException {
+    public void executeWorkflow(final String objectName, final String signal, final int objectID) {
         Object[] params = new Object[]{databaseName, userID, password, objectName, signal, objectID};
-        objectClient.execute("exec_workflow", params);
+        try {
+            objectClient.execute("exec_workflow", params);
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
 
     /**
      * Returns the Odoo server version for this session
      *
      * @return
-     * @throws XmlRpcException
      */
     
-    public Version getServerVersion() throws XmlRpcException {
-        // Cache server version
-        if (serverVersion == null) serverVersion = OdooXmlRpcProxy.getServerVersion(protocol, host, port);
-        return serverVersion;
+    public Version getServerVersion() {
+        try {
+            // Cache server version
+            if (serverVersion == null) serverVersion = OdooXmlRpcProxy.getServerVersion(protocol, host, port);
+            return serverVersion;
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
+        }
     }
 
-    public byte[] executeReportService(String reportName, Object[] ids) throws XmlRpcException {        
-        if (getServerVersion().getMajor() < 11) {
-            OdooXmlRpcProxy client = new OdooXmlRpcProxy(protocol, host, port, RPCServices.RPC_REPORT);
-            Object[] reportParams = new Object[]{databaseName, userID, password, reportName, ids};
-            Map<String, Object> result = (Map<String, Object>) client.execute("render_report", reportParams);
-            return DatatypeConverter.parseBase64Binary((String) result.get("result"));
-        } 
-        else {
-            // Implement changes thanks to
-            // https://github.com/OCA/odoorpc/issues/20
-            return null;
+    public byte[] executeReportService(String reportName, Object[] ids) throws XmlRpcRuntimeException {        
+        try {
+            if (getServerVersion().getMajor() < 11) {
+                OdooXmlRpcProxy client = new OdooXmlRpcProxy(protocol, host, port, RPCServices.RPC_REPORT);
+                Object[] reportParams = new Object[]{databaseName, userID, password, reportName, ids};
+                Map<String, Object> result = (Map<String, Object>) client.execute("render_report", reportParams);
+                return DatatypeConverter.parseBase64Binary((String) result.get("result"));
+            }
+            else {
+                // Implement changes thanks to
+                // https://github.com/OCA/odoorpc/issues/20
+                return null;
+            }
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException(ex);
         }
     }
 
