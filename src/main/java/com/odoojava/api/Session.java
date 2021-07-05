@@ -27,6 +27,7 @@ import com.odoojava.api.OdooXmlRpcProxy.RPCProtocol;
 import com.odoojava.api.OdooXmlRpcProxy.RPCServices;
 import java.util.Arrays;
 import java.util.stream.Collectors;
+import lombok.SneakyThrows;
 
 /**
  * *
@@ -143,7 +144,7 @@ public class Session {
         return reportAdapter;
     }
 
-    void getRemoteContext() throws XmlRpcException {
+    void getRemoteContext() {
         this.context.clear();
         @SuppressWarnings("unchecked")
         HashMap<String, Object> odooContext = (HashMap<String, Object>) this.executeCommand("res.users", "context_get",
@@ -240,10 +241,9 @@ public class Session {
      * @param parameters List of parameters for the command. For easy of use,
      * consider the OdooCommand object or ObjectAdapter
      * @return The result of the call
-     * @throws XmlRpcException
      */
-    public Object executeCommand(final String objectName, final String commandName, final Object[] parameters)
-            throws XmlRpcException {
+    @SneakyThrows
+    public Object executeCommand(final String objectName, final String commandName, final Object[] parameters) {
         Object[] connectionParams = new Object[]{databaseName, userID, password, objectName, commandName};
 
         // Combine the connection parameters and command parameters
@@ -266,10 +266,10 @@ public class Session {
      * @param parameters List of parameters for the command. For easy of use,
      * consider the OdooCommand object or ObjectAdapter
      * @return The result of the call
-     * @throws XmlRpcException
      */
+    @SneakyThrows
     public Object executeCommandWithContext(final String objectName, final String commandName,
-            final Object[] parameters) throws XmlRpcException {
+            final Object[] parameters) {
         
         //Object[] connectionParams = new Object[]{databaseName, userID, password, objectName, commandName};
 
