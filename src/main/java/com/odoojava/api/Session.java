@@ -13,7 +13,7 @@
  *   distributed under the License is distributed on an "AS IS" BASIS,
  *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *   See the License for the specific language governing permissions and
- *   limitations under the License. 
+ *   limitations under the License.
  *
  */
 package com.odoojava.api;
@@ -26,7 +26,9 @@ import org.apache.xmlrpc.XmlRpcException;
 import com.odoojava.api.OdooXmlRpcProxy.RPCProtocol;
 import com.odoojava.api.OdooXmlRpcProxy.RPCServices;
 import java.util.Arrays;
+import static java.util.Arrays.asList;
 import java.util.stream.Collectors;
+import lombok.Getter;
 
 /**
  * *
@@ -47,15 +49,16 @@ public class Session {
     private String userName;
     private String password;
     private int userID;
-    private Context context = new Context();    
+    @Getter
+    private Context context = new Context();
     private RPCProtocol protocol;
     private OdooXmlRpcProxy objectClient;
+//    private XmlRpcClient xmlRpcClient;
     private Version serverVersion;
 
     /**
      * * Session constructor
      *
-     * @param protocol XML-RPC protocol to use. ex http/https.
      * @param host Host name or IP address where the Odoo server is hosted
      * @param port XML-RPC port number to connect to. Typically 8069.
      * @param databaseName Database name to connect to
@@ -70,6 +73,13 @@ public class Session {
         this.userName = userName;
         this.password = password;
         this.objectClient = new OdooXmlRpcProxy(protocol, host, port, RPCServices.RPC_OBJECT);
+//        this.xmlRpcClient = new XmlRpcClient() {{
+//                setConfig(new XmlRpcClientConfigImpl() {{
+//                        setServerURL(new URL(String.format("%s/xmlrpc/2/object", url)));
+//                    }
+//                });
+//            }
+//        };
     }
 
     /**
@@ -116,7 +126,7 @@ public class Session {
             checkVersionCompatibility();
         } finally {
             Session.connecting = false;
-        }
+    }
         getRemoteContext();
     }
 
@@ -149,8 +159,8 @@ public class Session {
     void getRemoteContext() {
         this.context.clear();
         @SuppressWarnings("unchecked")
-        HashMap<String, Object> odooContext = (HashMap<String, Object>) this.executeCommand("res.users", "context_get",
-                new Object[]{});
+        HashMap<String, Object> odooContext = (HashMap<String, Object>)
+                this.executeCommand("res.users", "context_get", new Object[]{});
         this.context.putAll(odooContext);
 
         // Standard behavior is web/gui clients.
@@ -159,7 +169,7 @@ public class Session {
 
     int authenticate() throws Exception {
         OdooXmlRpcProxy commonClient = new OdooXmlRpcProxy(protocol, host, port, RPCServices.RPC_COMMON);
-        
+
         Object id = commonClient.execute("login", new Object[]{databaseName, userName, password});
 
         if (id instanceof Integer) userID = (Integer) id;
@@ -175,7 +185,7 @@ public class Session {
         try {
             checkDatabasePresence();
         } catch (Exception e) {}
-    }
+            }
 
     void checkDatabasePresence() {
         ArrayList<String> dbList = getDatabaseList(protocol, host, port);
@@ -185,7 +195,7 @@ public class Session {
                     .append(LINE_SEPARATOR).append(String.join(LINE_SEPARATOR, dbList)).append(LINE_SEPARATOR);
 
             throw new IllegalStateException(messageBuilder.toString());
-        }
+    }
     }
 
     private synchronized static void startConnecting() {
@@ -194,8 +204,8 @@ public class Session {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
                 e.printStackTrace();
+                    }
             }
-        }
         Session.connecting = true;
     }
 
@@ -248,20 +258,47 @@ public class Session {
     public Object executeCommand(final String objectName, final String commandName, final Object[] parameters) {
         try {
             Object[] connectionParams = new Object[]{databaseName, userID, password, objectName, commandName};
-            
+
             // Combine the connection parameters and command parameters
             Object[] params = new Object[connectionParams.length + (parameters == null ? 0 : parameters.length)];
             System.arraycopy(connectionParams, 0, params, 0, connectionParams.length);
-            
+
             if (parameters != null && parameters.length > 0) {
                 System.arraycopy(parameters, 0, params, connectionParams.length, parameters.length);
-            }
+    }
             return objectClient.execute("execute", params);
         } catch (XmlRpcException ex) {
             throw new XmlRpcRuntimeException(ex);
         }
     }
-        
+
+    public Object executeCommand(final String objectName, final String commandName, final Object[] parameters, final String command_name) {
+        try {
+            final Object[] connectionParams = {this.databaseName, this.userID, this.password, objectName, commandName};
+            final Object[] params = new Object[connectionParams.length + ((parameters == null) ? 0 : parameters.length)];
+            System.arraycopy(connectionParams, 0, params, 0, connectionParams.length);
+            if (parameters != null && parameters.length > 0) {
+                System.arraycopy(parameters, 0, params, connectionParams.length, parameters.length);
+            }
+            return this.objectClient.execute(command_name, params);
+        } catch (XmlRpcException ex) {
+            throw new XmlRpcRuntimeException((Throwable) ex);
+        }
+    }
+
+    public Object executeCommandRead(final String objectName, final Object[] fields, final Object [] ids) throws XmlRpcException {
+        return objectClient.execute("execute_kw", asList(
+                databaseName, userID, password,
+                objectName, "read",
+                asList(asList(ids)),
+                new HashMap(3) {{
+                    put("fields", fields);
+                    put("context", getContext());
+                    put("load", Boolean.FALSE);
+            }}
+        ));
+    }
+
     /**
      * Executes any command on the server linked to the /xmlrpc/object service.
      * parameters and Context are prepended .The context MUST NOT have been
@@ -293,9 +330,9 @@ public class Session {
      * @param signal Signal name to send, for example order_confirm
      * @param objectID Specific object ID to send the signal for
      */
-    public void executeWorkflow(final String objectName, final String signal, final int objectID) {
-        Object[] params = new Object[]{databaseName, userID, password, objectName, signal, objectID};
+    public void executeWorkflow(final String objectName, final String signal, final int objectID) {        
         try {
+            Object[] params = new Object[]{databaseName, userID, password, objectName, signal, objectID};
             objectClient.execute("exec_workflow", params);
         } catch (XmlRpcException ex) {
             throw new XmlRpcRuntimeException(ex);
@@ -307,7 +344,7 @@ public class Session {
      *
      * @return
      */
-    
+
     public Version getServerVersion() {
         try {
             // Cache server version
@@ -315,10 +352,10 @@ public class Session {
             return serverVersion;
         } catch (XmlRpcException ex) {
             throw new XmlRpcRuntimeException(ex);
-        }
+    }
     }
 
-    public byte[] executeReportService(String reportName, Object[] ids) throws XmlRpcRuntimeException {        
+    public byte[] executeReportService(String reportName, Object[] ids) throws XmlRpcRuntimeException {
         try {
             if (getServerVersion().getMajor() < 11) {
                 OdooXmlRpcProxy client = new OdooXmlRpcProxy(protocol, host, port, RPCServices.RPC_REPORT);
@@ -345,12 +382,4 @@ public class Session {
         return userID;
     }
 
-    /**
-     * Retrieves the context object for the session to set properties on
-     *
-     * @return
-     */
-    public Context getContext() {
-        return context;
-    }
 }

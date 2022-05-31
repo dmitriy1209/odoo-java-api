@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 import org.apache.xmlrpc.XmlRpcException;
 import com.odoojava.api.Field;
 import com.odoojava.api.FieldCollection;
-import com.odoojava.api.Row;
+import com.odoojava.api.MapRow;
 import java.util.Map;
 import lombok.AccessLevel;
 
@@ -138,31 +138,23 @@ public class FlatViewHelper {
     /**
      * Gets the row value for a flattened field definition.
      *
-     * @param row Standard row from an object adapter
+     * @param mapRow Standard row from an object adapter
      * @param fld Flattened field to retrieve info for
      * @return A single value for a flattened field
      */
-    public static Object getRowValue(Row row, FlatViewField fld) {
-        
-        Object value = (fld.getName().equals("id")) ? row.get("id") : row.get(fld.getSourceField());
-        
-        // handle many2one fields
+    public static Object getRowValue(MapRow mapRow, FlatViewField fld) {
+        Object value;
+        Object object = value = fld.getName().equals("id") ? mapRow.get("id") : mapRow.get(fld.getSourceField());
         if (fld.getSourceFieldIndex() >= 0 && value != null && value instanceof Object[]) {
-            value = ((Object[]) value)[fld.getSourceFieldIndex()];
+            value = ((Object[])value)[fld.getSourceFieldIndex()];
         }
-
-        // Handle many2many and one2many fields
         if (value instanceof Object[]) {
-            final StringBuilder sb = new StringBuilder("");
-            //String stringValue = "";
-            for (Object singleValue : (Object[]) value) {
+            StringBuilder sb = new StringBuilder("");
+            for (Object singleValue : (Object[])value) {
                 sb.append(",").append(singleValue);
-                //stringValue += "," + singleValue.toString();
             }
             value = sb.toString().substring(1);
-            //value = stringValue.substring(1);
         }
-
         return value;
     }
 

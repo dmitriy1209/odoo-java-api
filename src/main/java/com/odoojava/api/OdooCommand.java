@@ -128,6 +128,7 @@ public class OdooCommand {
      * @param ids List of id to fetch data for. Call searchObject to get a
      * potential list
      * @param fields List of fields to return data for
+     * @return 
      * @returnA collection of rows for an Odoo object
      * @throws XmlRpcException
      */
@@ -135,6 +136,11 @@ public class OdooCommand {
         return this.session.getServerVersion().getMajor() >= 8 ? 
                 (Object[]) session.executeCommandWithContext(objectName, "read", new Object[]{ids, fields}) :
                 (Object[]) session.executeCommand(objectName, "read", new Object[]{ids, fields, session.getContext()});
+    }
+    
+    public Object[] executeCommandRead(final String objectName, final String[] fields, Object [] ids) 
+            throws OdooApiException, XmlRpcException {
+        return (Object[]) session.executeCommandRead(objectName, fields, ids);
     }
 
     /**
@@ -212,7 +218,6 @@ public class OdooCommand {
      * @throws XmlRpcException
      */
     public Object createObject(String objectName, Map<String, Object> values) throws XmlRpcException {
-        Object readResult;
         final int serverVersion = this.session.getServerVersion().getMajor();
         return (serverVersion < 10 || serverVersion >= 13) ? 
                 (Object) session.executeCommand(objectName, "create", new Object[]{values}) :
@@ -246,7 +251,6 @@ public class OdooCommand {
      * @param objectName Object or model name to send the signal for
      * @param signal Signal name to send, for example order_confirm
      * @param objectID Specific object ID to send the signal for
-     * @return
      * @throws XmlRpcException
      */
     public void executeWorkflow(final String objectName, final String signal, final int objectID) throws XmlRpcException {
